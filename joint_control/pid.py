@@ -17,6 +17,8 @@ sys.path.append(os.path.join(os.path.abspath(os.path.dirname(__file__)), '..', '
 import numpy as np
 from collections import deque
 from spark_agent import SparkAgent, JOINT_CMD_NAMES
+import random
+import math
 
 
 class PIDController(object):
@@ -34,10 +36,10 @@ class PIDController(object):
         self.e1 = np.zeros(size)
         self.e2 = np.zeros(size)
         # ADJUST PARAMETERS BELOW
-        delay = 0
-        self.Kp = 0
-        self.Ki = 0
-        self.Kd = 0
+        delay = 1
+        self.Kp = 25
+        self.Ki = .3
+        self.Kd = .10
         self.y = deque(np.zeros(size), maxlen=delay + 1)
 
     def set_delay(self, delay):
@@ -53,6 +55,18 @@ class PIDController(object):
         @return control signal
         '''
         # YOUR CODE HERE
+        e0 = target - sensor
+
+        a0 = self.Kp + self.Ki * self.dt + self.Kd / self.dt
+        a1 = -self.Kp - 2 * self.Kd / self.dt
+        a2 = self.Kd / self.dt
+
+        self.u = self.y.pop() + a0*e0 + a1*self.e1 + a2*self.e2
+
+        self.e2 = self.e1
+        self.e1 = e0;
+
+        self.y.appendleft(self.u)
 
         return self.u
 
@@ -68,8 +82,22 @@ class PIDAgent(SparkAgent):
         number_of_joints = len(self.joint_names)
         self.joint_controller = PIDController(dt=0.01, size=number_of_joints)
         self.target_joints = {k: 0 for k in self.joint_names}
+        self.i = 0
 
     def think(self, perception):
+        if self.i > 80:
+            a = random.uniform(math.pi/2, 0)
+            b = random.uniform(math.pi/2, -math.pi/2)
+            c = random.uniform(math.pi/2, -math.pi/2)
+            self.target_joints["LShoulderRoll"] = a
+            self.target_joints["RShoulderRoll"] = -a
+            self.target_joints["RShoulderPitch"] = b
+            self.target_joints["LShoulderPitch"] = b
+            self.target_joints["HeadYaw"] = c
+            print(f"Move Head {c}, LShoulder {a}, RShoulder {b}")
+            self.i = 0
+
+        self.i += 1
         action = super(PIDAgent, self).think(perception)
         '''calculate control vector (speeds) from
         perception.joint:   current joints' positions (dict: joint_id -> position (current))
@@ -86,4 +114,6 @@ class PIDAgent(SparkAgent):
 if __name__ == '__main__':
     agent = PIDAgent()
     agent.target_joints['HeadYaw'] = 1.0
+    agent.target_joints['LShoulderRoll'] = 1.0
+    agent.target_joints["RShoulderPitch"] = 1.0
     agent.run()
